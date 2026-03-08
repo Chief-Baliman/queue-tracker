@@ -275,12 +275,32 @@
       showFullOverlay: false
     };
 
-    function writeState() {
-      return set(stateRef, state);
+    async function writeState() {
+      if (!state || typeof state !== "object") {
+        state = {};
+      }
+
+      if (!Array.isArray(state.queue)) {
+        state.queue = [];
+      }
+
+      if (typeof state.showFullOverlay !== "boolean") {
+        state.showFullOverlay = false;
+      }
+
+      try {
+        await set(stateRef, {
+          queue: state.queue,
+          showFullOverlay: state.showFullOverlay
+        });
+      } catch (err) {
+        console.error("Fehler beim Schreiben in Firebase:", err);
+        alert("Konnte die Queue nicht speichern.");
+      }
     }
 
     function renderOverlay() {
-      const queue = state.queue || [];
+      const queue = Array.isArray(state.queue) ? state.queue : [];
       const current = queue[0] || "-";
       const next = queue[1] || "-";
       const remaining = queue.length;
@@ -310,12 +330,20 @@
     }
 
     function removeOrder(index) {
+      if (!state || typeof state !== "object") {
+        state = {};
+      }
+
+      if (!Array.isArray(state.queue)) {
+        state.queue = [];
+      }
+
       state.queue.splice(index, 1);
       writeState();
     }
 
     function renderQueueList() {
-      const queue = state.queue || [];
+      const queue = Array.isArray(state.queue) ? state.queue : [];
 
       if (!queue.length) {
         queueListEl.innerHTML = '<div style="color: rgba(255,255,255,0.7); font-size: 14px;">Queue ist aktuell leer.</div>';
@@ -339,19 +367,35 @@
       renderQueueList();
     }
 
-    window.addOrder = function () {
+    window.addOrder = async function () {
       const value = orderInput.value.trim();
       if (!value) return;
+
+      if (!state || typeof state !== "object") {
+        state = {};
+      }
+
+      if (!Array.isArray(state.queue)) {
+        state.queue = [];
+      }
 
       state.queue.push(value);
       orderInput.value = "";
-      writeState();
+      await writeState();
       orderInput.focus();
     };
 
-    window.insertAtTop = function () {
+    window.insertAtTop = async function () {
       const value = orderInput.value.trim();
       if (!value) return;
+
+      if (!state || typeof state !== "object") {
+        state = {};
+      }
+
+      if (!Array.isArray(state.queue)) {
+        state.queue = [];
+      }
 
       if (state.queue.length === 0) {
         state.queue.unshift(value);
@@ -360,25 +404,37 @@
       }
 
       orderInput.value = "";
-      writeState();
+      await writeState();
       orderInput.focus();
     };
 
-    window.nextOrder = function () {
-      if (!state.queue.length) return;
+    window.nextOrder = async function () {
+      if (!state || typeof state !== "object") {
+        state = {};
+      }
+
+      if (!Array.isArray(state.queue) || !state.queue.length) return;
 
       state.queue.shift();
-      writeState();
+      await writeState();
     };
 
-    window.clearQueue = function () {
+    window.clearQueue = async function () {
+      if (!state || typeof state !== "object") {
+        state = {};
+      }
+
       state.queue = [];
-      writeState();
+      await writeState();
     };
 
-    window.toggleOverlayMode = function () {
+    window.toggleOverlayMode = async function () {
+      if (!state || typeof state !== "object") {
+        state = {};
+      }
+
       state.showFullOverlay = !state.showFullOverlay;
-      writeState();
+      await writeState();
     };
 
     orderInput.addEventListener("keydown", (e) => {
@@ -389,14 +445,19 @@
 
     onValue(stateRef, (snapshot) => {
       const data = snapshot.val();
-      if (data) {
-        state = data;
+
+      if (data && typeof data === "object") {
+        state = {
+          queue: Array.isArray(data.queue) ? data.queue : [],
+          showFullOverlay: typeof data.showFullOverlay === "boolean" ? data.showFullOverlay : false
+        };
       } else {
         state = {
           queue: [],
           showFullOverlay: false
         };
       }
+
       renderAll();
     });
   </script>

@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChiefCards Queue Tracker</title>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      font-family: Arial, Helvetica, sans-serif;
+      color: white;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: flex-start;
+      padding: 18px;
+    }
+
+    .overlay-box {
+      width: 320px;
+      background: rgba(8,18,42,0.82);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      backdrop-filter: blur(8px);
+      padding: 16px 18px;
+    }
+
+    .title {
+      font-size: 24px;
+      font-weight: 900;
+      line-height: 1;
+      margin-bottom: 14px;
+      text-shadow: 0 4px 12px rgba(0,0,0,0.35);
+    }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 10px;
+    }
+
+    .label {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.72);
+    }
+
+    .value {
+      font-size: 26px;
+      font-weight: 900;
+      line-height: 1.1;
+      text-align: right;
+    }
+
+    .small-value {
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1.1;
+      text-align: right;
+    }
+
+    #panel {
+      margin-top: 18px;
+      width: 420px;
+      background: rgba(20,20,20,.92);
+      padding: 14px;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    input {
+      flex: 1;
+      min-width: 160px;
+      padding: 12px 14px;
+      font-size: 16px;
+      border: 0;
+      border-radius: 10px;
+      outline: none;
+    }
+
+    button {
+      padding: 12px 16px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      border: 0;
+      border-radius: 10px;
+      background: #f3f3f3;
+      color: #111;
+    }
+
+    button:hover {
+      filter: brightness(0.96);
+    }
+
+    .button-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .queue-list {
+      background: rgba(255,255,255,0.06);
+      border-radius: 10px;
+      padding: 12px;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+
+    .queue-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      gap: 12px;
+    }
+
+    .queue-item:last-child {
+      border-bottom: none;
+    }
+
+    .queue-number {
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .danger {
+      background: #ed0502;
+      color: white;
+    }
+
+    .muted {
+      background: rgba(255,255,255,0.14);
+      color: white;
+    }
+
+    .hidden-ui #panel {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="overlay-box">
+    <div class="title">Queue</div>
+
+    <div class="row">
+      <div class="label">Aktuell</div>
+      <div class="value" id="currentOrder">-</div>
+    </div>
+
+    <div class="row">
+      <div class="label">Nächste</div>
+      <div class="small-value" id="nextOrder">-</div>
+    </div>
+
+    <div class="row">
+      <div class="label">Offen</div>
+      <div class="small-value" id="remainingOrders">0</div>
+    </div>
+  </div>
+
+  <div id="panel">
+    <div class="input-row">
+      <input id="orderInput" type="text" placeholder="Bestellnummer eingeben">
+      <button onclick="addOrder()">Zur Queue hinzufügen</button>
+    </div>
+
+    <div class="button-row">
+      <button onclick="nextOrder()">Nächste Bestellung</button>
+      <button class="muted" onclick="clearQueue()">Queue leeren</button>
+    </div>
+
+    <div class="queue-list" id="queueList"></div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const overlayMode = params.get("view") === "overlay";
+
+    if (overlayMode) {
+      document.body.classList.add("hidden-ui");
+    }
+
+    const orderInput = document.getElementById("orderInput");
+    const currentOrderEl = document.getElementById("currentOrder");
+    const nextOrderEl = document.getElementById("nextOrder");
+    const remainingOrdersEl = document.getElementById("remainingOrders");
+    const queueListEl = document.getElementById("queueList");
+
+    let queue = [];
+
+    function saveQueue() {
+      localStorage.setItem("chiefcards_queue", JSON.stringify(queue));
+    }
+
+    function loadQueue() {
+      try {
+        queue = JSON.parse(localStorage.getItem("chiefcards_queue") || "[]");
+      } catch {
+        queue = [];
+      }
+    }
+
+    function renderOverlay() {
+      const current = queue[0] || "-";
+      const next = queue[1] || "-";
+      const remaining = queue.length;
+
+      currentOrderEl.textContent = current === "-" ? "-" : "#" + current;
+      nextOrderEl.textContent = next === "-" ? "-" : "#" + next;
+      remainingOrdersEl.textContent = remaining;
+    }
+
+    function removeOrder(index) {
+      queue.splice(index, 1);
+      saveQueue();
+      renderAll();
+    }
+
+    function renderQueueList() {
+      if (!queue.length) {
+        queueListEl.innerHTML = '<div style="color: rgba(255,255,255,0.7); font-size: 14px;">Queue ist aktuell leer.</div>';
+        return;
+      }
+
+      queueListEl.innerHTML = queue.map((order, index) => `
+        <div class="queue-item">
+          <div class="queue-number">${index === 0 ? 'Aktuell: #' + order : '#' + order}</div>
+          <button class="danger" onclick="removeOrder(${index})">Entfernen</button>
+        </div>
+      `).join("");
+    }
+
+    function renderAll() {
+      renderOverlay();
+      renderQueueList();
+    }
+
+    function addOrder() {
+      const value = orderInput.value.trim();
+
+      if (!value) return;
+
+      queue.push(value);
+      orderInput.value = "";
+      saveQueue();
+      renderAll();
+      orderInput.focus();
+    }
+
+    function nextOrder() {
+      if (!queue.length) return;
+
+      queue.shift();
+      saveQueue();
+      renderAll();
+    }
+
+    function clearQueue() {
+      queue = [];
+      saveQueue();
+      renderAll();
+    }
+
+    orderInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        addOrder();
+      }
+    });
+
+    loadQueue();
+    renderAll();
+  </script>
+
+</body>
+</html>

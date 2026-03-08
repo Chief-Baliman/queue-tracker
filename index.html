@@ -236,7 +236,25 @@
     <div class="queue-list" id="queueList"></div>
   </div>
 
-  <script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyA5kq-HiCkVroQLCwwVc24C8XYPJTZvegM",
+      authDomain: "queue-tracker-3fa3c.firebaseapp.com",
+      databaseURL: "https://queue-tracker-3fa3c-default-rtdb.europe-west1.firebasedatabase.app/",
+      projectId: "queue-tracker-3fa3c",
+      storageBucket: "queue-tracker-3fa3c.firebasestorage.app",
+      messagingSenderId: "132132188124",
+      appId: "1:132132188124:web:ecc130f7ee7ac9d61be919",
+      measurementId: "G-3QBWJHGDXG"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const stateRef = ref(db, "queueTracker/state");
+
     const params = new URLSearchParams(window.location.search);
     const overlayMode = params.get("view") === "overlay";
 
@@ -252,25 +270,17 @@
     const compactViewEl = document.getElementById("compactView");
     const fullOverlayListEl = document.getElementById("fullOverlayList");
 
-    let queue = [];
-    let showFullOverlay = false;
+    let state = {
+      queue: [],
+      showFullOverlay: false
+    };
 
-    function saveState() {
-      localStorage.setItem("chiefcards_queue", JSON.stringify(queue));
-      localStorage.setItem("chiefcards_queue_overlay_mode", showFullOverlay ? "full" : "compact");
-    }
-
-    function loadState() {
-      try {
-        queue = JSON.parse(localStorage.getItem("chiefcards_queue") || "[]");
-      } catch {
-        queue = [];
-      }
-
-      showFullOverlay = localStorage.getItem("chiefcards_queue_overlay_mode") === "full";
+    function writeState() {
+      return set(stateRef, state);
     }
 
     function renderOverlay() {
+      const queue = state.queue || [];
       const current = queue[0] || "-";
       const next = queue[1] || "-";
       const remaining = queue.length;
@@ -279,7 +289,7 @@
       nextOrderEl.textContent = next === "-" ? "-" : "#" + next;
       remainingOrdersEl.textContent = remaining;
 
-      if (showFullOverlay) {
+      if (state.showFullOverlay) {
         compactViewEl.classList.add("hide");
         fullOverlayListEl.classList.add("show");
 
@@ -300,12 +310,13 @@
     }
 
     function removeOrder(index) {
-      queue.splice(index, 1);
-      saveState();
-      renderAll();
+      state.queue.splice(index, 1);
+      writeState();
     }
 
     function renderQueueList() {
+      const queue = state.queue || [];
+
       if (!queue.length) {
         queueListEl.innerHTML = '<div style="color: rgba(255,255,255,0.7); font-size: 14px;">Queue ist aktuell leer.</div>';
         return;
@@ -314,9 +325,13 @@
       queueListEl.innerHTML = queue.map((order, index) => `
         <div class="queue-item">
           <div class="queue-number">${index === 0 ? 'Aktuell: #' + order : '#' + order}</div>
-          <button class="danger" onclick="removeOrder(${index})">Entfernen</button>
+          <button class="danger" data-index="${index}">Entfernen</button>
         </div>
       `).join("");
+
+      queueListEl.querySelectorAll(".danger").forEach(btn => {
+        btn.addEventListener("click", () => removeOrder(Number(btn.dataset.index)));
+      });
     }
 
     function renderAll() {
@@ -324,52 +339,47 @@
       renderQueueList();
     }
 
-    function addOrder() {
+    window.addOrder = function () {
       const value = orderInput.value.trim();
       if (!value) return;
 
-      queue.push(value);
+      state.queue.push(value);
       orderInput.value = "";
-      saveState();
-      renderAll();
+      writeState();
       orderInput.focus();
-    }
+    };
 
-    function insertAtTop() {
+    window.insertAtTop = function () {
       const value = orderInput.value.trim();
       if (!value) return;
 
-      if (queue.length === 0) {
-        queue.unshift(value);
+      if (state.queue.length === 0) {
+        state.queue.unshift(value);
       } else {
-        queue.splice(1, 0, value);
+        state.queue.splice(1, 0, value);
       }
 
       orderInput.value = "";
-      saveState();
-      renderAll();
+      writeState();
       orderInput.focus();
-    }
+    };
 
-    function nextOrder() {
-      if (!queue.length) return;
+    window.nextOrder = function () {
+      if (!state.queue.length) return;
 
-      queue.shift();
-      saveState();
-      renderAll();
-    }
+      state.queue.shift();
+      writeState();
+    };
 
-    function clearQueue() {
-      queue = [];
-      saveState();
-      renderAll();
-    }
+    window.clearQueue = function () {
+      state.queue = [];
+      writeState();
+    };
 
-    function toggleOverlayMode() {
-      showFullOverlay = !showFullOverlay;
-      saveState();
-      renderOverlay();
-    }
+    window.toggleOverlayMode = function () {
+      state.showFullOverlay = !state.showFullOverlay;
+      writeState();
+    };
 
     orderInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
@@ -377,13 +387,18 @@
       }
     });
 
-    window.addEventListener("storage", () => {
-  loadState();
-  renderAll();
-});
-    
-    loadState();
-renderAll();
+    onValue(stateRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        state = data;
+      } else {
+        state = {
+          queue: [],
+          showFullOverlay: false
+        };
+      }
+      renderAll();
+    });
   </script>
 
 </body>

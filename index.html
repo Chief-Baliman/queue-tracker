@@ -70,9 +70,40 @@
       text-align: right;
     }
 
+    .full-overlay-list {
+      display: none;
+      margin-top: 8px;
+      max-height: 260px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .full-overlay-list.show {
+      display: block;
+    }
+
+    .full-overlay-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .full-overlay-item:last-child {
+      border-bottom: none;
+    }
+
+    .compact-view.hide {
+      display: none;
+    }
+
     #panel {
       margin-top: 18px;
-      width: 420px;
+      width: 460px;
       background: rgba(20,20,20,.92);
       padding: 14px;
       border-radius: 12px;
@@ -122,7 +153,7 @@
       background: rgba(255,255,255,0.06);
       border-radius: 10px;
       padding: 12px;
-      max-height: 220px;
+      max-height: 240px;
       overflow-y: auto;
     }
 
@@ -154,6 +185,11 @@
       color: white;
     }
 
+    .accent {
+      background: #e9a846;
+      color: #111;
+    }
+
     .hidden-ui #panel {
       display: none;
     }
@@ -164,30 +200,36 @@
   <div class="overlay-box">
     <div class="title">Queue</div>
 
-    <div class="row">
-      <div class="label">Aktuell</div>
-      <div class="value" id="currentOrder">-</div>
+    <div id="compactView" class="compact-view">
+      <div class="row">
+        <div class="label">Aktuell</div>
+        <div class="value" id="currentOrder">-</div>
+      </div>
+
+      <div class="row">
+        <div class="label">Nächste</div>
+        <div class="small-value" id="nextOrder">-</div>
+      </div>
+
+      <div class="row">
+        <div class="label">Offen</div>
+        <div class="small-value" id="remainingOrders">0</div>
+      </div>
     </div>
 
-    <div class="row">
-      <div class="label">Nächste</div>
-      <div class="small-value" id="nextOrder">-</div>
-    </div>
-
-    <div class="row">
-      <div class="label">Offen</div>
-      <div class="small-value" id="remainingOrders">0</div>
-    </div>
+    <div id="fullOverlayList" class="full-overlay-list"></div>
   </div>
 
   <div id="panel">
     <div class="input-row">
       <input id="orderInput" type="text" placeholder="Bestellnummer eingeben">
       <button onclick="addOrder()">Zur Queue hinzufügen</button>
+      <button class="accent" onclick="insertAtTop()">Oben einfügen</button>
     </div>
 
     <div class="button-row">
       <button onclick="nextOrder()">Nächste Bestellung</button>
+      <button class="muted" onclick="toggleOverlayMode()">Overlay umschalten</button>
       <button class="muted" onclick="clearQueue()">Queue leeren</button>
     </div>
 
@@ -207,19 +249,25 @@
     const nextOrderEl = document.getElementById("nextOrder");
     const remainingOrdersEl = document.getElementById("remainingOrders");
     const queueListEl = document.getElementById("queueList");
+    const compactViewEl = document.getElementById("compactView");
+    const fullOverlayListEl = document.getElementById("fullOverlayList");
 
     let queue = [];
+    let showFullOverlay = false;
 
-    function saveQueue() {
+    function saveState() {
       localStorage.setItem("chiefcards_queue", JSON.stringify(queue));
+      localStorage.setItem("chiefcards_queue_overlay_mode", showFullOverlay ? "full" : "compact");
     }
 
-    function loadQueue() {
+    function loadState() {
       try {
         queue = JSON.parse(localStorage.getItem("chiefcards_queue") || "[]");
       } catch {
         queue = [];
       }
+
+      showFullOverlay = localStorage.getItem("chiefcards_queue_overlay_mode") === "full";
     }
 
     function renderOverlay() {
@@ -230,11 +278,30 @@
       currentOrderEl.textContent = current === "-" ? "-" : "#" + current;
       nextOrderEl.textContent = next === "-" ? "-" : "#" + next;
       remainingOrdersEl.textContent = remaining;
+
+      if (showFullOverlay) {
+        compactViewEl.classList.add("hide");
+        fullOverlayListEl.classList.add("show");
+
+        if (!queue.length) {
+          fullOverlayListEl.innerHTML = '<div class="full-overlay-item">Queue leer</div>';
+        } else {
+          fullOverlayListEl.innerHTML = queue.map((order, index) => `
+            <div class="full-overlay-item">
+              <span>${index + 1}.</span>
+              <span>#${order}</span>
+            </div>
+          `).join("");
+        }
+      } else {
+        compactViewEl.classList.remove("hide");
+        fullOverlayListEl.classList.remove("show");
+      }
     }
 
     function removeOrder(index) {
       queue.splice(index, 1);
-      saveQueue();
+      saveState();
       renderAll();
     }
 
@@ -259,12 +326,27 @@
 
     function addOrder() {
       const value = orderInput.value.trim();
-
       if (!value) return;
 
       queue.push(value);
       orderInput.value = "";
-      saveQueue();
+      saveState();
+      renderAll();
+      orderInput.focus();
+    }
+
+    function insertAtTop() {
+      const value = orderInput.value.trim();
+      if (!value) return;
+
+      if (queue.length === 0) {
+        queue.unshift(value);
+      } else {
+        queue.splice(1, 0, value);
+      }
+
+      orderInput.value = "";
+      saveState();
       renderAll();
       orderInput.focus();
     }
@@ -273,14 +355,20 @@
       if (!queue.length) return;
 
       queue.shift();
-      saveQueue();
+      saveState();
       renderAll();
     }
 
     function clearQueue() {
       queue = [];
-      saveQueue();
+      saveState();
       renderAll();
+    }
+
+    function toggleOverlayMode() {
+      showFullOverlay = !showFullOverlay;
+      saveState();
+      renderOverlay();
     }
 
     orderInput.addEventListener("keydown", (e) => {
@@ -289,7 +377,7 @@
       }
     });
 
-    loadQueue();
+    loadState();
     renderAll();
   </script>
 
